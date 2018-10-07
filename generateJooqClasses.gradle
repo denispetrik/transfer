@@ -1,0 +1,74 @@
+import org.flywaydb.core.Flyway
+import org.flywaydb.core.internal.util.jdbc.DriverDataSource
+import org.jooq.util.GenerationTool
+import org.jooq.util.jaxb.Configuration
+import org.jooq.util.jaxb.Database
+import org.jooq.util.jaxb.Generator
+import org.jooq.util.jaxb.Jdbc
+import org.jooq.util.jaxb.Target
+
+buildscript {
+    dependencies {
+        classpath "org.hsqldb:hsqldb:2.4.0"
+        classpath "org.flywaydb:flyway-core:5.0.7"
+        classpath "org.jooq:jooq-codegen:3.10.7"
+        classpath "org.jooq:jooq-meta:3.10.7"
+        classpath "javax.xml.bind:jaxb-api:2.3.0"
+        classpath files('src/main/resources/')
+    }
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+//noinspection GroovyAssignabilityCheck
+task generateJooqClasses {
+    doLast {
+        def dbName = 'transfer'
+        def dbUser = 'sa'
+        def dbPassword = ''
+        def schema = 'p'
+        def jdbcUrl = "jdbc:hsqldb:mem:$dbName"
+        def driverClass = 'org.hsqldb.jdbc.JDBCDriver'
+        def targetPackage = 'ru.yandex.money.transfer.jooq'
+
+        def properties = new Properties()
+        properties.setProperty('sql.syntax_pgs', 'true')
+
+        def classLoader = Thread.currentThread().contextClassLoader
+
+        def dataSource = new DriverDataSource(classLoader, driverClass, jdbcUrl, dbUser, dbPassword)
+
+        def flyway = new Flyway()
+        flyway.dataSource = dataSource
+        flyway.schemas = schema
+        flyway.migrate()
+
+        def jdbc = new Jdbc()
+                .withUrl(jdbcUrl)
+                .withUser(dbUser)
+                .withPassword(dbPassword)
+
+        def database = new Database()
+                .withName('org.jooq.util.hsqldb.HSQLDBDatabase')
+                .withExcludes('flyway_schema_history')
+                .withInputSchema(schema)
+
+        def target = new Target()
+                .withPackageName(targetPackage)
+                .withDirectory("$buildDir/generated")
+
+        def generator = new Generator()
+                .withDatabase(database)
+                .withTarget(target)
+
+        def configuration = new Configuration()
+                .withJdbc(jdbc)
+                .withGenerator(generator)
+
+        GenerationTool.generate(configuration)
+    }
+}
+
+compileJava.dependsOn generateJooqClasses
